@@ -1,0 +1,64 @@
+services:
+  - type: web
+    name: jpgtopdf-web
+    env: python
+    buildCommand: ./build.sh
+    startCommand: gunicorn jpgtopdf.wsgi:application --bind 0.0.0.0:$PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.8.0
+      - key: DATABASE_URL
+        value: sqlite:///db.sqlite3
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: false
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: jpgtopdf-redis
+          property: connectionString
+
+  - type: worker
+    name: jpgtopdf-celery-worker
+    env: python
+    buildCommand: ./build.sh
+    startCommand: celery -A jpgtopdf worker -l info
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.8.0
+      - key: DATABASE_URL
+        value: sqlite:///db.sqlite3
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: false
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: jpgtopdf-redis
+          property: connectionString
+
+  - type: worker
+    name: jpgtopdf-celery-beat
+    env: python
+    buildCommand: ./build.sh
+    startCommand: celery -A jpgtopdf beat -l info
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.8.0
+      - key: DATABASE_URL
+        value: sqlite:///db.sqlite3
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: false
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: jpgtopdf-redis
+          property: connectionString
+
+  - type: redis
+    name: jpgtopdf-redis
+    ipAllowList: [] 
