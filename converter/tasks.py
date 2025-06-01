@@ -7,10 +7,36 @@ from django.utils import timezone
 from datetime import timedelta
 from celery.schedules import crontab
 from celery import Celery
+import os
 
 logger = logging.getLogger(__name__)
 
 PENDING_TIMEOUT_SECONDS = 10
+FILE_CLEANUP_MINUTES = 5
+
+@shared_task
+def cleanup_old_files():
+    """Clean up JPG and PDF files that are older than FILE_CLEANUP_MINUTES minutes."""
+    cleanup_threshold = timezone.now() - timedelta(minutes=FILE_CLEANUP_MINUTES)
+    old_uploads = JPGUpload.objects.filter(timestamp__lt=cleanup_threshold)
+    
+    for upload in old_uploads:
+        try:
+            # Delete JPG file
+            if upload.jpeg_file and os.path.exists(upload.jpeg_file.path):
+                os.remove(upload.jpeg_file.path)
+                upload.jpeg_file = None
+            
+            # Delete PDF file
+            if upload.pdf_file and os.path.exists(upload.pdf_file.path):
+                os.remove(upload.pdf_file.path)
+                upload.pdf_file = None
+            
+            upload.save()
+            logger.info(f"Cleaned up files for upload {upload.id}")
+            
+        except Exception as e:
+            logger.error(f"Error cleaning up files for upload {upload.id}: {str(e)}")
 
 @shared_task
 def cleanup_stuck_uploads():

@@ -20,4 +20,8 @@ app.conf.beat_schedule = {
         'task': 'converter.tasks.cleanup_stuck_uploads',
         'schedule': 10.0,  # Run every 10 seconds
     },
+    'cleanup-old-files': {
+        'task': 'converter.tasks.cleanup_old_files',
+        'schedule': 60.0,  # Run every minute
+    },
 } 
