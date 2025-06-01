@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+
+# Virtual Environment
+venv/
+ENV/
+.env
+.venv
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+uploads/
+*.pdf
+*.jpg
+*.jpeg
+
+# Sensitive data
+jpgtopdf/settings_local.py
+jpgtopdf/settings_prod.py
+.env*
+*.pem
+*.key
+secrets.json
+credentials.json
+config.json
+*.cert
+*.crt
+*.key
+*.p12
+*.pfx
+*.env*
+.secret*
+celerybeat-schedule
+celerybeat.pid 

@@ -1,0 +1,425 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JPG to PDF Converter</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #3B82F6;
+            --primary-hover: #2563EB;
+            --error-color: #EF4444;
+            --success-color: #10B981;
+            --background-color: #F3F4F6;
+            --warning-color: #F59E0B;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background-color);
+            color: #1F2937;
+            line-height: 1.5;
+        }
+
+        #app {
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
+        }
+
+        .upload-container {
+            background: white;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            width: 100%;
+            max-width: 480px;
+        }
+
+        h1 {
+            font-size: 1.875rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            text-align: center;
+            color: #111827;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: #374151;
+        }
+
+        input[type="email"] {
+            width: 100%;
+            padding: 0.625rem;
+            border: 1px solid #D1D5DB;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            transition: border-color 0.2s;
+        }
+
+        input[type="email"]:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .file-input-container {
+            border: 2px dashed #D1D5DB;
+            border-radius: 0.5rem;
+            padding: 2rem 1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .file-input-container:hover,
+        .file-input-container.dragging {
+            border-color: var(--primary-color);
+            background-color: rgba(59, 130, 246, 0.05);
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .file-placeholder {
+            color: #6B7280;
+            font-size: 0.875rem;
+        }
+
+        .selected-file {
+            color: var(--primary-color);
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: var(--primary-hover);
+        }
+
+        button:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .alert {
+            margin-top: 1rem;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .alert-error {
+            background-color: #FEE2E2;
+            color: var(--error-color);
+        }
+
+        .alert-success {
+            background-color: #D1FAE5;
+            color: var(--success-color);
+        }
+
+        .alert-warning {
+            background-color: #FEF3C7;
+            color: var(--warning-color);
+        }
+
+        .progress-container {
+            margin-top: 1.5rem;
+            text-align: center;
+        }
+
+        .progress-status {
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 0.5rem;
+            background-color: #E5E7EB;
+            border-radius: 0.25rem;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background-color: var(--primary-color);
+            transition: width 0.3s ease;
+        }
+
+        .status-icon {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        @media (max-width: 640px) {
+            .upload-container {
+                padding: 1.5rem;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="upload-container">
+            <h1>JPG to PDF Converter</h1>
+            <form @submit.prevent="handleSubmit" v-if="!isProcessing">
+                <div class="form-group">
+                    <label for="email">Email Address</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        v-model="email" 
+                        :disabled="isUploading"
+                        placeholder="Enter your email"
+                        required
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <label>JPG File</label>
+                    <div 
+                        class="file-input-container"
+                        :class="{ dragging: isDragging }"
+                        @dragenter.prevent="isDragging = true"
+                        @dragleave.prevent="isDragging = false"
+                        @dragover.prevent
+                        @drop.prevent="handleFileDrop"
+                        @click="$refs.fileInput.click()"
+                    >
+                        <input 
+                            type="file" 
+                            class="file-input"
+                            ref="fileInput"
+                            @change="handleFileSelect"
+                            accept=".jpg,.jpeg"
+                            :disabled="isUploading"
+                            required
+                        >
+                        <div class="file-placeholder" v-if="!selectedFile">
+                            <p>Drag and drop your JPG file here</p>
+                            <p>or click to select</p>
+                        </div>
+                        <div class="selected-file" v-else>
+                            Selected: [[ selectedFile.name ]]
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" :disabled="isUploading || !isValid">
+                    [[ isUploading ? 'Uploading...' : 'Convert to PDF' ]]
+                </button>
+
+                <div v-if="error" class="alert alert-error">
+                    [[ error ]]
+                </div>
+                <div v-if="success" class="alert alert-success">
+                    [[ success ]]
+                </div>
+            </form>
+
+            <div v-else class="progress-container">
+                <div class="status-icon">
+                    <span v-if="currentStatus === 'COMPLETED'">✅</span>
+                    <span v-else-if="currentStatus === 'FAILED'">❌</span>
+                    <span v-else>⏳</span>
+                </div>
+                <div class="progress-status">
+                    [[ getStatusMessage ]]
+                </div>
+                <div class="progress-bar" v-if="currentStatus !== 'COMPLETED' && currentStatus !== 'FAILED'">
+                    <div class="progress-bar-fill" :style="{ width: progressWidth + '%' }"></div>
+                </div>
+                <div v-if="currentStatus === 'FAILED'" class="alert alert-error">
+                    [[ errorMessage ]]
+                </div>
+                <div v-if="currentStatus === 'COMPLETED'" class="alert alert-success">
+                    Your PDF has been sent to [[ email ]]. Please check your inbox.
+                </div>
+                <button @click="resetForm" style="margin-top: 1rem">
+                    Convert Another File
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue
+
+        // Set up axios CSRF token handling
+        axios.defaults.xsrfCookieName = 'csrftoken'
+        axios.defaults.xsrfHeaderName = 'X-CSRFToken'
+
+        createApp({
+            delimiters: ['[[', ']]'],
+            data() {
+                return {
+                    email: '',
+                    selectedFile: null,
+                    isDragging: false,
+                    isUploading: false,
+                    isProcessing: false,
+                    error: '',
+                    success: '',
+                    uploadId: null,
+                    currentStatus: null,
+                    errorMessage: null,
+                    pollInterval: null,
+                    progressSteps: {
+                        'PENDING': 0,
+                        'CONVERTING': 33,
+                        'SENDING': 66,
+                        'COMPLETED': 100,
+                        'FAILED': 100
+                    }
+                }
+            },
+            computed: {
+                isValid() {
+                    return this.email && this.selectedFile
+                },
+                progressWidth() {
+                    return this.progressSteps[this.currentStatus] || 0
+                },
+                getStatusMessage() {
+                    const messages = {
+                        'PENDING': 'Preparing to convert...',
+                        'CONVERTING': 'Converting JPG to PDF...',
+                        'SENDING': 'Sending PDF to your email...',
+                        'COMPLETED': 'Conversion completed!',
+                        'FAILED': 'Conversion failed'
+                    }
+                    return messages[this.currentStatus] || 'Processing...'
+                }
+            },
+            methods: {
+                handleFileSelect(event) {
+                    const file = event.target.files[0]
+                    if (file && (file.type === 'image/jpeg' || file.type === 'image/jpg')) {
+                        this.selectedFile = file
+                        this.error = ''
+                    } else {
+                        this.error = 'Please select a valid JPG file'
+                        this.selectedFile = null
+                        event.target.value = ''
+                    }
+                },
+                handleFileDrop(event) {
+                    this.isDragging = false
+                    const file = event.dataTransfer.files[0]
+                    if (file && (file.type === 'image/jpeg' || file.type === 'image/jpg')) {
+                        this.selectedFile = file
+                        this.error = ''
+                    } else {
+                        this.error = 'Please select a valid JPG file'
+                        this.selectedFile = null
+                    }
+                },
+                async handleSubmit() {
+                    try {
+                        this.isUploading = true
+                        this.error = ''
+                        
+                        const formData = new FormData()
+                        formData.append('email', this.email)
+                        formData.append('jpeg_file', this.selectedFile)
+                        
+                        const response = await axios.post('/api/converter/upload/', formData, {
+                            headers: {
+                                'Content-Type': 'multipart/form-data'
+                            }
+                        })
+                        
+                        this.uploadId = response.data.data.id
+                        this.isProcessing = true
+                        this.currentStatus = 'PENDING'
+                        this.startPolling()
+                        
+                    } catch (error) {
+                        this.error = error.response?.data?.message || 'An error occurred during upload'
+                    } finally {
+                        this.isUploading = false
+                    }
+                },
+                async checkStatus() {
+                    try {
+                        const response = await axios.get(`/api/converter/status/${this.uploadId}/`)
+                        this.currentStatus = response.data.status
+                        this.errorMessage = response.data.error_message
+                        
+                        if (this.currentStatus === 'COMPLETED' || this.currentStatus === 'FAILED') {
+                            this.stopPolling()
+                        }
+                    } catch (error) {
+                        console.error('Error checking status:', error)
+                        this.stopPolling()
+                        this.error = 'Failed to check conversion status'
+                    }
+                },
+                startPolling() {
+                    this.pollInterval = setInterval(this.checkStatus, 2000)
+                },
+                stopPolling() {
+                    if (this.pollInterval) {
+                        clearInterval(this.pollInterval)
+                        this.pollInterval = null
+                    }
+                },
+                resetForm() {
+                    this.email = ''
+                    this.selectedFile = null
+                    this.isProcessing = false
+                    this.error = ''
+                    this.success = ''
+                    this.uploadId = null
+                    this.currentStatus = null
+                    this.errorMessage = null
+                    this.stopPolling()
+                }
+            },
+            beforeUnmount() {
+                this.stopPolling()
+            }
+        }).mount('#app')
+    </script>
+</body>
+</html> 
