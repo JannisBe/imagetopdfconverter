@@ -77,7 +77,7 @@ The application will be available at `http://localhost:8000`
 
 1. Visit the web interface at `http://localhost:8000`
 2. Upload one an Image
-   - Supported formats: JPG, JPEG
+   - Supported formats: JPG, JPEG, PNG, GIF, BMP
    - Maximum file size: 10MB per file
    - Maximum total upload size: 50MB
 3. Enter your email address
