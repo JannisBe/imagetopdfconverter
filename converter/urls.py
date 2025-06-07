@@ -1,9 +1,9 @@
 from django.urls import path
-from .views import JPGUploadView, JPGUploadStatusView
+from .views import ImageUploadView, ImageUploadStatusView
 
 app_name = 'converter'
 
 urlpatterns = [
-    path('upload/', JPGUploadView.as_view(), name='upload'),
-    path('status/<int:pk>/', JPGUploadStatusView.as_view(), name='status'),
+    path('upload/', ImageUploadView.as_view(), name='upload'),
+    path('status/<int:pk>/', ImageUploadStatusView.as_view(), name='status'),
 ] 

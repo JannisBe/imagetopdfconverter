@@ -1,37 +1,40 @@
 from django.test import TestCase
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from rest_framework.test import APITestCase
 from rest_framework import status
-from converter.models import JPGUpload
+from converter.models import ImageUpload
 from .test_utils import TestFileManager
+from django.core.files.uploadedfile import SimpleUploadedFile
 import os
 from unittest.mock import patch, MagicMock
 from faker import Faker
 
-class JPGUploadViewTest(APITestCase):
+class ImageUploadViewTest(APITestCase):
     def setUp(self):
         self.fake = Faker()
-        self.test_file = SimpleUploadedFile(
-            "test.jpg",
-            b"file_content",
-            content_type="image/jpeg"
+        # Create a test image
+        self.test_file = TestFileManager.create_test_image(
+            format='JPEG',
+            mode='RGB',
+            size=(100, 100),
+            color='red'
         )
+        
         self.upload_url = reverse('converter:upload')
         self.valid_payload = {
             'email': self.fake.email(),
             'jpeg_file': self.test_file
         }
-        self.temp_file_path = TestFileManager.create_temp_jpg()
 
     def tearDown(self):
-        TestFileManager.cleanup_file(self.temp_file_path)
         # Clean up any uploaded files
-        for jpg_upload in JPGUpload.objects.all():
-            if jpg_upload.jpeg_file and os.path.exists(jpg_upload.jpeg_file.path):
-                os.unlink(jpg_upload.jpeg_file.path)
+        for image_upload in ImageUpload.objects.all():
+            if image_upload.jpeg_file and os.path.exists(image_upload.jpeg_file.path):
+                os.unlink(image_upload.jpeg_file.path)
+            if image_upload._pdf_file and os.path.exists(image_upload._pdf_file.path):
+                os.unlink(image_upload._pdf_file.path)
 
-    @patch('converter.tasks.process_jpg_upload.delay')
+    @patch('converter.tasks.process_image_upload.delay')
     def test_successful_upload(self, mock_delay):
         """Test a successful file upload with valid data"""
         # Mock the Celery task
@@ -40,12 +43,11 @@ class JPGUploadViewTest(APITestCase):
         mock_delay.return_value = mock_task
 
         response = self.client.post(self.upload_url, self.valid_payload, format='multipart')
-        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
-        self.assertIn('message', response.data)
-        self.assertIn('data', response.data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn('id', response.data)
         
-        upload = JPGUpload.objects.first()
-        self.assertEqual(upload.status, JPGUpload.Status.PENDING)
+        upload = ImageUpload.objects.first()
+        self.assertEqual(upload.status, ImageUpload.Status.PENDING)
         self.assertEqual(upload.email, self.valid_payload['email'])
         self.assertEqual(upload.task_id, 'test-task-id')
 
@@ -74,11 +76,13 @@ class JPGUploadViewTest(APITestCase):
 
     def test_invalid_file_type(self):
         """Test rejection of non-JPG file"""
+        # Create a text file
         invalid_file = SimpleUploadedFile(
             "test.txt",
-            b"file_content",
+            b"not an image",
             content_type="text/plain"
         )
+        
         payload = {
             'email': self.fake.email(),
             'jpeg_file': invalid_file
@@ -86,7 +90,7 @@ class JPGUploadViewTest(APITestCase):
         response = self.client.post(self.upload_url, payload, format='multipart')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    @patch('converter.tasks.process_jpg_upload.delay')
+    @patch('converter.tasks.process_image_upload.delay')
     def test_status_endpoint(self, mock_delay):
         """Test the status endpoint functionality"""
         # Mock the Celery task
@@ -96,7 +100,7 @@ class JPGUploadViewTest(APITestCase):
 
         # Create an upload first
         response = self.client.post(self.upload_url, self.valid_payload, format='multipart')
-        upload_id = response.data['data']['id']
+        upload_id = response.data['id']
         
         # Test status endpoint
         status_url = reverse('converter:status', args=[upload_id])

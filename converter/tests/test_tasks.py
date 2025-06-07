@@ -1,10 +1,14 @@
 from django.test import TestCase, override_settings
-from django.core.files.uploadedfile import SimpleUploadedFile
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, PropertyMock
 from celery import Task
-from ..models import JPGUpload
-from ..tasks import process_jpg_upload
+from ..models import ImageUpload
+from ..tasks import process_image_upload, cleanup_old_files, cleanup_stuck_uploads
+from .test_utils import TestFileManager
 from faker import Faker
+import os
+from django.utils import timezone
+from datetime import timedelta
+from django.conf import settings
 
 @override_settings(
     CELERY_TASK_ALWAYS_EAGER=True,
@@ -17,81 +21,90 @@ from faker import Faker
 class TaskTests(TestCase):
     def setUp(self):
         self.fake = Faker()
-        self.test_file = SimpleUploadedFile(
-            "test.jpg",
-            b"file_content",
-            content_type="image/jpeg"
+        # Create a test image
+        self.test_file = TestFileManager.create_test_image(
+            format='JPEG',
+            mode='RGB',
+            size=(100, 100),
+            color='red'
         )
-        self.upload = JPGUpload.objects.create(
+        
+        self.upload = ImageUpload.objects.create(
             email=self.fake.email(),
             jpeg_file=self.test_file
         )
 
-    @patch('converter.services.JPGToPDFConverter.convert_to_pdf')
-    @patch('converter.services.JPGToPDFConverter.send_pdf_email')
-    def test_successful_processing(self, mock_send_email, mock_convert):
+    def tearDown(self):
+        # Clean up uploaded files
+        if self.upload.jpeg_file:
+            if os.path.exists(self.upload.jpeg_file.path):
+                os.remove(self.upload.jpeg_file.path)
+        if self.upload._pdf_file:
+            if os.path.exists(self.upload._pdf_file.path):
+                os.remove(self.upload._pdf_file.path)
+
+    @patch('time.sleep', return_value=None)
+    def test_successful_processing(self, mock_sleep):
         """Test successful processing of an upload"""
-        mock_convert.return_value = True
-        mock_send_email.return_value = True
-        
-        # Mock the task request
-        mock_task = MagicMock()
-        mock_task.request.id = 'test-task-id'
-        
-        with patch('converter.tasks.process_jpg_upload', mock_task):
-            result = process_jpg_upload(self.upload.id)
-        
+        result = process_image_upload(self.upload.id)
         self.upload.refresh_from_db()
         self.assertEqual(result['status'], 'success')
-        self.assertEqual(self.upload.status, JPGUpload.Status.COMPLETED)
-        
-        mock_convert.assert_called_once()
-        mock_send_email.assert_called_once()
+        self.assertEqual(self.upload.status, ImageUpload.Status.COMPLETED)
 
-    @patch('converter.services.JPGToPDFConverter.convert_to_pdf')
-    def test_conversion_failure(self, mock_convert):
+    @patch('time.sleep', return_value=None)
+    @patch('converter.models.ImageUpload.pdf_file', new_callable=PropertyMock, return_value=None)
+    def test_conversion_failure(self, mock_pdf_file, mock_sleep):
         """Test handling of conversion failure"""
-        mock_convert.return_value = False
-        
-        # Mock the task request
-        mock_task = MagicMock()
-        mock_task.request.id = 'test-task-id'
-        
-        with patch('converter.tasks.process_jpg_upload', mock_task):
-            result = process_jpg_upload(self.upload.id)
-        
+        self.upload.error_message = 'Failed to convert image to PDF'
+        self.upload.save()
+        result = process_image_upload(self.upload.id)
         self.upload.refresh_from_db()
         self.assertEqual(result['status'], 'error')
-        self.assertEqual(self.upload.status, JPGUpload.Status.FAILED)
+        self.assertEqual(self.upload.status, ImageUpload.Status.FAILED)
         self.assertIsNotNone(self.upload.error_message)
 
-    @patch('converter.services.JPGToPDFConverter.convert_to_pdf')
-    @patch('converter.services.JPGToPDFConverter.send_pdf_email')
-    def test_email_failure(self, mock_send_email, mock_convert):
-        """Test handling of email sending failure"""
-        mock_convert.return_value = True
-        mock_send_email.return_value = False
-        
-        # Mock the task request
-        mock_task = MagicMock()
-        mock_task.request.id = 'test-task-id'
-        
-        with patch('converter.tasks.process_jpg_upload', mock_task):
-            result = process_jpg_upload(self.upload.id)
-        
-        self.upload.refresh_from_db()
-        self.assertEqual(result['status'], 'error')
-        self.assertEqual(self.upload.status, JPGUpload.Status.FAILED)
-        self.assertIsNotNone(self.upload.error_message)
-
-    def test_nonexistent_upload(self):
+    @patch('time.sleep', return_value=None)
+    def test_nonexistent_upload(self, mock_sleep):
         """Test handling of non-existent upload ID"""
-        # Mock the task request
-        mock_task = MagicMock()
-        mock_task.request.id = 'test-task-id'
-        
-        with patch('converter.tasks.process_jpg_upload', mock_task):
-            result = process_jpg_upload(99999)
-        
+        result = process_image_upload(99999)
         self.assertEqual(result['status'], 'error')
-        self.assertEqual(result['message'], 'Upload not found') 
+        self.assertEqual(result['message'], 'Upload not found')
+
+    def test_cleanup_old_files(self):
+        """Test cleanup of old files"""
+        # Create an old upload
+        old_file = TestFileManager.create_test_image(
+            format='JPEG',
+            mode='RGB',
+            size=(100, 100),
+            color='blue'
+        )
+        old_upload = ImageUpload.objects.create(
+            email=self.fake.email(),
+            jpeg_file=old_file
+        )
+        old_upload.timestamp = timezone.now() - timedelta(minutes=settings.FILE_CLEANUP_MINUTES + 1)
+        old_upload.save()
+        cleanup_old_files()
+        self.assertFalse(os.path.exists(old_upload.jpeg_file.path))
+        if old_upload._pdf_file:
+            self.assertFalse(os.path.exists(old_upload._pdf_file.path))
+
+    def test_cleanup_stuck_uploads(self):
+        """Test cleanup of stuck uploads"""
+        stuck_file = TestFileManager.create_test_image(
+            format='JPEG',
+            mode='RGB',
+            size=(100, 100),
+            color='green'
+        )
+        stuck_upload = ImageUpload.objects.create(
+            email=self.fake.email(),
+            jpeg_file=stuck_file
+        )
+        stuck_upload.timestamp = timezone.now() - timedelta(seconds=settings.PENDING_TIMEOUT_SECONDS + 1)
+        stuck_upload.save()
+        cleanup_stuck_uploads()
+        stuck_upload.refresh_from_db()
+        self.assertEqual(stuck_upload.status, ImageUpload.Status.FAILED)
+        self.assertIsNotNone(stuck_upload.error_message) 

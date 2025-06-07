@@ -4,9 +4,9 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 from django.http import Http404
-from .models import JPGUpload
-from .serializers import JPGUploadSerializer
-from .tasks import process_jpg_upload
+from .models import ImageUpload
+from .serializers import ImageUploadSerializer
+from .tasks import process_image_upload
 from kombu.exceptions import OperationalError
 import logging
 
@@ -14,57 +14,57 @@ logger = logging.getLogger(__name__)
 
 # Create your views here.
 
-class JPGUploadView(generics.CreateAPIView):
-    queryset = JPGUpload.objects.all()
-    serializer_class = JPGUploadSerializer
+class ImageUploadView(generics.CreateAPIView):
+    queryset = ImageUpload.objects.all()
+    serializer_class = ImageUploadSerializer
     parser_classes = (MultiPartParser, FormParser)
 
     def perform_create(self, serializer):
         try:
             # Save the upload
-            jpg_upload = serializer.save()
+            image_upload = serializer.save()
             
             # Start async processing
-            task = process_jpg_upload.delay(jpg_upload.id)
-            jpg_upload.task_id = task.id
-            jpg_upload.save()
+            task = process_image_upload.delay(image_upload.id)
+            image_upload.task_id = task.id
+            image_upload.save()
             
         except OperationalError as e:
             logger.error("Failed to connect to message broker: %s", str(e))
-            jpg_upload.update_status(JPGUpload.Status.FAILED, "Failed to start processing task")
+            image_upload.update_status(ImageUpload.Status.FAILED, "Failed to start processing task")
             raise ValidationError("Service temporarily unavailable. Please try again later.")
         except Exception as e:
             logger.exception("Failed to process upload")
-            if jpg_upload:
-                jpg_upload.update_status(JPGUpload.Status.FAILED, str(e))
+            if image_upload:
+                image_upload.update_status(ImageUpload.Status.FAILED, str(e))
             raise ValidationError(str(e))
 
     def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
         try:
-            serializer = self.get_serializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            self.perform_create(serializer)
+            # Create the upload instance
+            image_upload = serializer.save()
             
-            return Response({
-                'message': 'File uploaded successfully. You will receive the PDF via email shortly.',
-                'data': serializer.data
-            }, status=status.HTTP_202_ACCEPTED)
+            # Start the processing task
+            task = process_image_upload.delay(image_upload.id)
+            image_upload.task_id = task.id
+            image_upload.save()
             
-        except ValidationError as e:
-            return Response({
-                'message': str(e),
-                'errors': e.detail if hasattr(e, 'detail') else None
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
         except Exception as e:
-            logger.exception("Unexpected error during upload")
-            return Response({
-                'message': 'An unexpected error occurred',
-                'error': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # If anything goes wrong, update status and return error
+            image_upload.update_status(ImageUpload.Status.FAILED, "Failed to start processing task")
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
-class JPGUploadStatusView(generics.RetrieveAPIView):
-    queryset = JPGUpload.objects.all()
-    serializer_class = JPGUploadSerializer
+class ImageUploadStatusView(generics.RetrieveAPIView):
+    queryset = ImageUpload.objects.all()
+    serializer_class = ImageUploadSerializer
     
     def retrieve(self, request, *args, **kwargs):
         try:

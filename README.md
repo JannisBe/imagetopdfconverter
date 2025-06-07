@@ -1,15 +1,6 @@
 # JPG to PDF Converter
 
-A web application that converts a given JPG image to a PDF file and sends it to user email.
-
-## Features
-
-- Upload multiple JPG images
-- Convert images to PDF format
-- Real-time conversion status updates
-- Email notifications when conversion is complete
-- Automatic cleanup of stuck uploads
-- Modern frontend with progress indicators
+A tiny web application that converts a given JPG image to a PDF file and sends it to user email.
 
 ## Linux Dependencies
 

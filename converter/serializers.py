@@ -1,13 +1,13 @@
 from rest_framework import serializers
-from .models import JPGUpload
+from .models import ImageUpload
 
-class JPGUploadSerializer(serializers.ModelSerializer):
+class ImageUploadSerializer(serializers.ModelSerializer):
     status = serializers.CharField(read_only=True)
     error_message = serializers.CharField(read_only=True)
     task_id = serializers.CharField(read_only=True)
 
     class Meta:
-        model = JPGUpload
+        model = ImageUpload
         fields = ['id', 'email', 'jpeg_file', 'timestamp', 'status', 'error_message', 'task_id']
         read_only_fields = ['id', 'timestamp', 'status', 'error_message', 'task_id']
 

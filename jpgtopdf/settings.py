@@ -135,8 +135,13 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 for dir_path in ['uploads/jpg', 'uploads/pdf']:
     os.makedirs(os.path.join(MEDIA_ROOT, dir_path), exist_ok=True)
 
+# File cleanup settings
+FILE_CLEANUP_MINUTES = 5
+PENDING_TIMEOUT_SECONDS = 10
+
 # Import sensitive settings from local settings file
 try:
     from .settings_local import *
 except ImportError:
     from .settings_template import *
+
