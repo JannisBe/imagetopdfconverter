@@ -1,4 +1,4 @@
-# Image to PDF Converter 
+# Jannis's Image to PDF Converter 
 
 A tiny web application that converts a given image to a PDF file and sends it to user email.
 
