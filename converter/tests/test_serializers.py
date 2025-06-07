@@ -3,10 +3,15 @@ from converter.serializers import ImageUploadSerializer
 from .test_utils import TestFileManager
 from faker import Faker
 from django.core.files.uploadedfile import SimpleUploadedFile
+from rest_framework.test import APITestCase
+from rest_framework.exceptions import ValidationError
+from ..models import ImageUpload
+from ..serializers import ImageUploadSerializer
 
-class ImageUploadSerializerTest(TestCase):
+class ImageUploadSerializerTest(APITestCase):
     def setUp(self):
         self.fake = Faker()
+        self.serializer = ImageUploadSerializer()
         # Create a test image
         self.test_file = TestFileManager.create_test_image(
             format='JPEG',
@@ -64,9 +69,9 @@ class ImageUploadSerializerTest(TestCase):
         """Test serializer with file exceeding size limit"""
         # Create a large image
         large_file = TestFileManager.create_test_image(
-            format='PNG',
+            format='TIFF',
             mode='RGB',
-            size=(1000, 1000),
+            size=(10000, 10000),
             color='black'
         )
 
@@ -76,4 +81,24 @@ class ImageUploadSerializerTest(TestCase):
         }
         serializer = ImageUploadSerializer(data=large_data)
         self.assertFalse(serializer.is_valid())
-        self.assertIn('jpeg_file', serializer.errors) 
+        self.assertIn('jpeg_file', serializer.errors)
+
+    def test_validate_image_file_types(self):
+        """Test validation of different image file types using subtests."""
+        file_types = [
+            ('test.jpg', b'fake image data', 'image/jpeg'),
+            ('test.jpeg', b'fake image data', 'image/jpeg'),
+            ('test.png', b'fake image data', 'image/png'),
+            ('test.gif', b'fake image data', 'image/gif'),
+            ('test.bmp', b'fake image data', 'image/bmp'),
+            ('test.txt', b'not an image', 'text/plain'),
+        ]
+
+        for filename, content, content_type in file_types:
+            with self.subTest(filename=filename):
+                file = SimpleUploadedFile(filename, content, content_type=content_type)
+                if filename.endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp')):
+                    self.assertEqual(self.serializer.validate_jpeg_file(file), file)
+                else:
+                    with self.assertRaises(ValidationError):
+                        self.serializer.validate_jpeg_file(file) 
